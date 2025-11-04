@@ -132,7 +132,8 @@ function Search-ProcessesByDocument {
     )
 
     try {
-        # URL encode the search criteria with quotes
+        # URL encode the search criteria with quotes for exact matching
+        # The quotes ensure we search for the exact phrase, not fuzzy match
         $searchCriteria = [System.Uri]::EscapeDataString("`"$DocumentName`"")
 
         # Build the search URL
@@ -145,19 +146,37 @@ function Search-ProcessesByDocument {
             "Content-Type" = "application/json"
         }
 
-        Write-ColorOutput "  Searching for: $DocumentName" "Gray"
+        Write-ColorOutput "  Searching for: `"$DocumentName`"" "Gray"
+        Write-Verbose "  Search URL: $searchUrl"
 
         $response = Invoke-RestMethod -Uri $searchUrl -Method Get -Headers $headers
 
-        if ($response.success -and $response.response) {
-            return $response.response
+        # Debug: Show response structure
+        Write-Verbose "  Response success: $($response.success)"
+        Write-Verbose "  Response count: $(if ($response.response) { $response.response.Count } else { 0 })"
+
+        if ($response.success) {
+            # Check if response array exists and has items
+            if ($response.response -and $response.response.Count -gt 0) {
+                Write-Verbose "  Returning $($response.response.Count) result(s)"
+                return $response.response
+            }
+            else {
+                Write-Verbose "  No results in response array"
+                return @()
+            }
         }
         else {
+            Write-ColorOutput "  API returned success=false" "Yellow"
             return @()
         }
     }
     catch {
         Write-ColorOutput "  Error searching for '$DocumentName': $_" "Yellow"
+        Write-Verbose "  Exception details: $($_.Exception.Message)"
+        if ($_.Exception.Response) {
+            Write-Verbose "  Status code: $($_.Exception.Response.StatusCode)"
+        }
         return @()
     }
 }
@@ -166,6 +185,11 @@ function Search-ProcessesByDocument {
 try {
     Write-ColorOutput "`n=== Process Manager Unpublished Process Search ===" "Cyan"
     Write-ColorOutput "This script searches for unpublished processes that reference specific documents.`n" "White"
+
+    if ($VerbosePreference -eq 'SilentlyContinue') {
+        Write-ColorOutput "Tip: Run with -Verbose flag for detailed debugging output" "Gray"
+    }
+    Write-Host ""
 
     # Get Process Manager Site URL
     $siteUrl = Read-Host "Enter the Process Manager Site URL (e.g., https://demo.promapp.com)"

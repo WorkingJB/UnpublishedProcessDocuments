@@ -65,9 +65,23 @@ See `SampleDocumentNames.csv` for an example.
    - Authenticate to Process Manager (OAuth2)
    - Obtain a search service token
    - Determine the regional search endpoint
-   - Search for each document name
+   - Search for each document name (with quotes for exact matching)
    - Display progress in the console
    - Export results to a timestamped CSV file
+
+### Verbose Mode
+
+For debugging and detailed output, run the script with the `-Verbose` flag:
+
+```powershell
+.\Search-UnpublishedProcesses.ps1 -Verbose
+```
+
+This will show:
+- The exact search URLs being called
+- Response success status and result counts
+- Detailed error messages and exception details
+- Authentication and token retrieval process details
 
 ## Output
 
@@ -83,10 +97,43 @@ The script generates a CSV file named `UnpublishedProcesses_Results_YYYYMMDD_HHM
 
 ## Example Output
 
+### Console Output
+
+```
+=== Process Manager Unpublished Process Search ===
+This script searches for unpublished processes that reference specific documents.
+
+Authenticating to Process Manager...
+Authentication successful!
+Getting search service token...
+Search service token obtained successfully!
+Using regional search endpoint: https://dmo-wus-sch.promapp.io
+
+Reading document names from CSV...
+Found 3 document names to search.
+
+[1/3] Processing: Action Item
+  Searching for: "Action Item"
+  Found 2 unpublished process(es)
+[2/3] Processing: Screenshot 2025-11
+  Searching for: "Screenshot 2025-11"
+  Found 1 unpublished process(es)
+[3/3] Processing: Employee Handbook
+  Searching for: "Employee Handbook"
+  No unpublished processes found
+
+=== Search Complete ===
+Total unpublished processes found: 3
+Results exported to: UnpublishedProcesses_Results_20251104_143022.csv
+```
+
+### CSV Output
+
 ```csv
 DocumentName,ProcessName,ProcessUniqueId,ItemUrl,EntityType
-Screenshot 2025-11,DeDocument Test,bc18b3a1-2c5d-4109-b379-0f0c890c2d86,https://demo.promapp.com/.../Process/bc18b3a1...,UnpublishedProcess
-Test Document,Test Process,6b78b5ae-d7e5-480e-b385-ff1323c322e1,https://demo.promapp.com/.../Process/6b78b5ae...,UnpublishedProcess
+Action Item,Process Review Workflow,abc123...,https://demo.promapp.com/.../Process/abc123...,UnpublishedProcess
+Action Item,Document Management,def456...,https://demo.promapp.com/.../Process/def456...,UnpublishedProcess
+Screenshot 2025-11,DeDocument Test,bc18b3a1...,https://demo.promapp.com/.../Process/bc18b3a1...,UnpublishedProcess
 ```
 
 ## API Details
@@ -128,6 +175,37 @@ The script uses the following Process Manager APIs in sequence:
 
 The script automatically handles all three steps. The search service token is required for authenticating against the regional search endpoints.
 
+## Search Behavior
+
+### Exact Match vs. Fuzzy Search
+
+The script automatically wraps all document names in **double quotes** to perform exact phrase matching. This prevents fuzzy search from returning irrelevant results.
+
+For example:
+- Searching for `Action Item` without quotes might return results for "Action", "Item", "Actions", "Items", etc.
+- Searching for `"Action Item"` (with quotes) returns only exact matches for "Action Item"
+
+**The script automatically adds quotes for you**, so you don't need to include them in your CSV file.
+
+Example CSV:
+```csv
+DocumentName
+Action Item
+Screenshot 2025-11
+Employee Handbook
+```
+
+The script will search for `"Action Item"`, `"Screenshot 2025-11"`, and `"Employee Handbook"` (with quotes).
+
+### Search Fields
+
+The search looks across multiple fields in unpublished processes:
+- Document names and attachments
+- Activity names and descriptions
+- Process names and objectives
+- Notes and background text
+- Other searchable content fields
+
 ## Troubleshooting
 
 ### Authentication Failures
@@ -142,9 +220,37 @@ The script automatically handles all three steps. The search service token is re
 - Ensure the tenant ID is correct in the search token endpoint
 
 ### No Results Found
-- Verify document names are spelled correctly in the CSV
-- Check that the documents are actually referenced in unpublished processes
-- Try searching with partial document names
+
+If the script reports "No unpublished processes found" but you know results exist:
+
+1. **Run with Verbose Mode**:
+   ```powershell
+   .\Search-UnpublishedProcesses.ps1 -Verbose
+   ```
+   This will show:
+   - The exact search URL being called
+   - The API response status
+   - The number of results returned
+
+2. **Check the Search Term**:
+   - Verify document names are spelled exactly as they appear in Process Manager
+   - The script automatically adds quotes for exact matching
+   - Check for extra spaces or special characters in your CSV
+
+3. **Verify Against API Directly**:
+   - Copy the search URL from verbose output
+   - Test it directly in a browser or API client
+   - Compare the response with what the script reports
+
+4. **Common Causes**:
+   - Document is referenced in a **published** process (script only searches unpublished)
+   - Document name has slight differences (case-sensitive, extra spaces, etc.)
+   - Search service token has expired (script will show 401 error)
+   - Regional endpoint is incorrect (verify the endpoint shown in verbose output)
+
+5. **Check Process Type**:
+   - The script searches only for `IncludedTypes=1` (UnpublishedProcess)
+   - If you need published processes, the script would need to be modified
 
 ### Network Errors
 - Ensure you have network access to the Process Manager instance

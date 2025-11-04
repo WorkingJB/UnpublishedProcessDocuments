@@ -90,11 +90,44 @@ function Get-AuthToken {
     }
 }
 
+# Function to get search service token
+function Get-SearchServiceToken {
+    param(
+        [string]$BaseUrl,
+        [string]$TenantId,
+        [string]$BearerToken
+    )
+
+    try {
+        $searchTokenUrl = "$BaseUrl/$TenantId/search/GetSearchServiceToken"
+
+        $headers = @{
+            Authorization = "Bearer $BearerToken"
+        }
+
+        Write-ColorOutput "Getting search service token..." "Cyan"
+
+        $response = Invoke-RestMethod -Uri $searchTokenUrl -Method Get -Headers $headers
+
+        if ($response.Status -eq "Success" -and $response.Message) {
+            Write-ColorOutput "Search service token obtained successfully!" "Green"
+            return $response.Message
+        }
+        else {
+            throw "Failed to get search service token: Invalid response"
+        }
+    }
+    catch {
+        Write-ColorOutput "Failed to get search service token: $_" "Red"
+        throw
+    }
+}
+
 # Function to search for processes by document name
 function Search-ProcessesByDocument {
     param(
         [string]$SearchEndpoint,
-        [string]$BearerToken,
+        [string]$SearchToken,
         [string]$DocumentName
     )
 
@@ -108,7 +141,7 @@ function Search-ProcessesByDocument {
         $searchUrl = "$SearchEndpoint/fullsearch?SearchCriteria=$searchCriteria&IncludedTypes=1&SearchMatchType=0&pageNumber=1"
 
         $headers = @{
-            Authorization = "Bearer $BearerToken"
+            Authorization = "Bearer $SearchToken"
             "Content-Type" = "application/json"
         }
 
@@ -151,6 +184,9 @@ try {
     # Authenticate
     $bearerToken = Get-AuthToken -BaseUrl $siteUrl -TenantId $tenantId -Username $username -Password $password
 
+    # Get search service token
+    $searchToken = Get-SearchServiceToken -BaseUrl $siteUrl -TenantId $tenantId -BearerToken $bearerToken
+
     # Determine the correct search endpoint based on region
     $searchEndpoint = Get-SearchEndpoint -BaseUrl $siteUrl
 
@@ -185,7 +221,7 @@ try {
         $processedCount++
         Write-ColorOutput "[$processedCount/$($documentNames.Count)] Processing: $docName" "Cyan"
 
-        $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -BearerToken $bearerToken -DocumentName $docName
+        $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -SearchToken $searchToken -DocumentName $docName
 
         if ($processes.Count -gt 0) {
             Write-ColorOutput "  Found $($processes.Count) unpublished process(es)" "Green"

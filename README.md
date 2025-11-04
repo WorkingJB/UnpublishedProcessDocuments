@@ -6,9 +6,24 @@ This PowerShell script searches for unpublished processes in Process Manager tha
 
 The script:
 1. Authenticates to the Process Manager API using OAuth2
-2. Reads document names from a CSV file
-3. Searches for unpublished processes that reference each document
-4. Exports the results to a new CSV file with process names, unique IDs, and URLs
+2. Automatically routes search requests to the correct regional endpoint
+3. Reads document names from a CSV file
+4. Searches for unpublished processes that reference each document
+5. Exports the results to a new CSV file with process names, unique IDs, and URLs
+
+## Regional Endpoints
+
+The script automatically detects your Process Manager region and routes search requests to the appropriate search endpoint:
+
+| Region | Base URL | Search Endpoint |
+|--------|----------|-----------------|
+| Demo | https://demo.promapp.com | https://dmo-wus-sch.promapp.io |
+| US | https://us.promapp.com | https://prd-wus-sch.promapp.io |
+| Canada | https://ca.promapp.com | https://prd-cac-sch.promapp.io |
+| Europe | https://eu.promapp.com | https://prd-neu-sch.promapp.io |
+| Australia | https://au.promapp.com | https://prd-aus-sch.promapp.io |
+
+**Note**: Authentication is performed against the base URL, while search requests are routed to the regional search endpoint. This happens automatically based on the site URL you provide.
 
 ## Prerequisites
 
@@ -77,13 +92,17 @@ Test Document,Test Process,6b78b5ae-d7e5-480e-b385-ff1323c322e1,https://demo.pro
 The script uses the following Process Manager APIs:
 
 ### Authentication
+- **Base URL**: The main Process Manager site URL (e.g., `https://demo.promapp.com`)
 - **Endpoint**: `/{tenantId}/oauth2/token`
 - **Method**: POST
 - **Body**: `grant_type=password&username={username}&password={password}`
+- **Returns**: Bearer token for API authentication
 
 ### Search
+- **Base URL**: Regional search endpoint (automatically determined, e.g., `https://dmo-wus-sch.promapp.io`)
 - **Endpoint**: `/fullsearch`
 - **Method**: GET
+- **Authentication**: Bearer token from authentication step
 - **Parameters**:
   - `SearchCriteria`: Document name (URL-encoded with quotes)
   - `IncludedTypes`: 1 (UnpublishedProcess)

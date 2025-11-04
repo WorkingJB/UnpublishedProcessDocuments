@@ -22,6 +22,38 @@ function Write-ColorOutput {
     Write-Host $Message -ForegroundColor $Color
 }
 
+# Function to get the appropriate search endpoint based on region
+function Get-SearchEndpoint {
+    param(
+        [string]$BaseUrl
+    )
+
+    # Regional mapping for Process Manager search endpoints
+    $regionalMapping = @{
+        "demo.promapp.com" = "https://dmo-wus-sch.promapp.io"
+        "us.promapp.com"   = "https://prd-wus-sch.promapp.io"
+        "ca.promapp.com"   = "https://prd-cac-sch.promapp.io"
+        "eu.promapp.com"   = "https://prd-neu-sch.promapp.io"
+        "au.promapp.com"   = "https://prd-aus-sch.promapp.io"
+    }
+
+    # Extract the domain from the base URL
+    $uri = [System.Uri]$BaseUrl
+    $domain = $uri.Host
+
+    # Check if we have a mapping for this domain
+    if ($regionalMapping.ContainsKey($domain)) {
+        $searchEndpoint = $regionalMapping[$domain]
+        Write-ColorOutput "Using regional search endpoint: $searchEndpoint" "Gray"
+        return $searchEndpoint
+    }
+    else {
+        # If no mapping found, use the base URL (for custom domains)
+        Write-ColorOutput "Using base URL for search endpoint (no regional mapping found)" "Yellow"
+        return $BaseUrl
+    }
+}
+
 # Function to authenticate and get bearer token
 function Get-AuthToken {
     param(
@@ -61,7 +93,7 @@ function Get-AuthToken {
 # Function to search for processes by document name
 function Search-ProcessesByDocument {
     param(
-        [string]$BaseUrl,
+        [string]$SearchEndpoint,
         [string]$BearerToken,
         [string]$DocumentName
     )
@@ -73,7 +105,7 @@ function Search-ProcessesByDocument {
         # Build the search URL
         # IncludedTypes=1 means UnpublishedProcess
         # SearchMatchType=0 is default matching
-        $searchUrl = "$BaseUrl/fullsearch?SearchCriteria=$searchCriteria&IncludedTypes=1&SearchMatchType=0&pageNumber=1"
+        $searchUrl = "$SearchEndpoint/fullsearch?SearchCriteria=$searchCriteria&IncludedTypes=1&SearchMatchType=0&pageNumber=1"
 
         $headers = @{
             Authorization = "Bearer $BearerToken"
@@ -119,6 +151,9 @@ try {
     # Authenticate
     $bearerToken = Get-AuthToken -BaseUrl $siteUrl -TenantId $tenantId -Username $username -Password $password
 
+    # Determine the correct search endpoint based on region
+    $searchEndpoint = Get-SearchEndpoint -BaseUrl $siteUrl
+
     # Get CSV file path
     Write-ColorOutput "`nEnter the path to the CSV file containing document names." "Cyan"
     Write-ColorOutput "The CSV should have a column named 'DocumentName'." "Gray"
@@ -150,7 +185,7 @@ try {
         $processedCount++
         Write-ColorOutput "[$processedCount/$($documentNames.Count)] Processing: $docName" "Cyan"
 
-        $processes = Search-ProcessesByDocument -BaseUrl $siteUrl -BearerToken $bearerToken -DocumentName $docName
+        $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -BearerToken $bearerToken -DocumentName $docName
 
         if ($processes.Count -gt 0) {
             Write-ColorOutput "  Found $($processes.Count) unpublished process(es)" "Green"

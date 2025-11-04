@@ -62,7 +62,9 @@ See `SampleDocumentNames.csv` for an example.
    - Path to the CSV file containing document names
 
 3. The script will:
-   - Authenticate to Process Manager
+   - Authenticate to Process Manager (OAuth2)
+   - Obtain a search service token
+   - Determine the regional search endpoint
    - Search for each document name
    - Display progress in the console
    - Export results to a timestamped CSV file
@@ -89,25 +91,42 @@ Test Document,Test Process,6b78b5ae-d7e5-480e-b385-ff1323c322e1,https://demo.pro
 
 ## API Details
 
-The script uses the following Process Manager APIs:
+The script uses the following Process Manager APIs in sequence:
 
-### Authentication
+### 1. OAuth2 Authentication
 - **Base URL**: The main Process Manager site URL (e.g., `https://demo.promapp.com`)
 - **Endpoint**: `/{tenantId}/oauth2/token`
 - **Method**: POST
 - **Body**: `grant_type=password&username={username}&password={password}`
 - **Returns**: Bearer token for API authentication
 
-### Search
+### 2. Get Search Service Token
+- **Base URL**: The main Process Manager site URL (e.g., `https://demo.promapp.com`)
+- **Endpoint**: `/{tenantId}/search/GetSearchServiceToken`
+- **Method**: GET
+- **Authentication**: Bearer token from step 1
+- **Returns**: JSON with `Status: "Success"` and `Message` containing the search service token
+
+### 3. Search
 - **Base URL**: Regional search endpoint (automatically determined, e.g., `https://dmo-wus-sch.promapp.io`)
 - **Endpoint**: `/fullsearch`
 - **Method**: GET
-- **Authentication**: Bearer token from authentication step
+- **Authentication**: Search service token from step 2
 - **Parameters**:
   - `SearchCriteria`: Document name (URL-encoded with quotes)
   - `IncludedTypes`: 1 (UnpublishedProcess)
   - `SearchMatchType`: 0 (default matching)
   - `pageNumber`: 1
+
+### Authentication Flow
+
+```
+1. User credentials → OAuth2 Token (Bearer Token)
+2. Bearer Token → Search Service Token
+3. Search Service Token → Search API calls
+```
+
+The script automatically handles all three steps. The search service token is required for authenticating against the regional search endpoints.
 
 ## Troubleshooting
 
@@ -115,6 +134,12 @@ The script uses the following Process Manager APIs:
 - Verify your username and password are correct
 - Ensure the tenant ID is correct
 - Check that your account has API access enabled
+
+### Search Service Token Failures
+- If you receive a 401 Unauthorized error during searches, the search service token may have failed
+- Verify the bearer token is valid and not expired
+- Check that your account has search API permissions
+- Ensure the tenant ID is correct in the search token endpoint
 
 ### No Results Found
 - Verify document names are spelled correctly in the CSV

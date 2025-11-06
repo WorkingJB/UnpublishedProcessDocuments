@@ -132,7 +132,9 @@ function Search-ProcessesByDocument {
     )
 
     try {
-        # URL encode the search criteria with quotes
+        # URL encode the search criteria with quotes for exact matching
+        # The quotes ensure we search for the exact phrase, not fuzzy match
+        # Example: "Action Item" becomes %22Action%20Item%22
         $searchCriteria = [System.Uri]::EscapeDataString("`"$DocumentName`"")
 
         # Build the search URL
@@ -145,19 +147,69 @@ function Search-ProcessesByDocument {
             "Content-Type" = "application/json"
         }
 
-        Write-ColorOutput "  Searching for: $DocumentName" "Gray"
+        Write-ColorOutput "  Searching for: `"$DocumentName`"" "Gray"
+        Write-Verbose "  Search URL: $searchUrl"
+        Write-Verbose "  Encoded criteria: $searchCriteria"
 
         $response = Invoke-RestMethod -Uri $searchUrl -Method Get -Headers $headers
 
-        if ($response.success -and $response.response) {
-            return $response.response
+        # Log the full response structure for debugging
+        Write-Verbose "  Raw response type: $($response.GetType().Name)"
+        Write-Verbose "  Response.success property: $($response.success)"
+
+        if ($null -eq $response) {
+            Write-Verbose "  Response is null"
+            return @()
+        }
+
+        if ($null -eq $response.response) {
+            Write-Verbose "  Response.response is null"
+            return @()
+        }
+
+        # Force response.response to be an array
+        $results = @($response.response)
+
+        Write-Verbose "  Results array count: $($results.Count)"
+
+        if ($response.success -eq $true -or $response.success -eq "true") {
+            if ($results.Count -gt 0) {
+                Write-Verbose "  Returning $($results.Count) result(s)"
+
+                # Log the first result for debugging
+                if ($results.Count -gt 0) {
+                    Write-Verbose "  First result Name: $($results[0].Name)"
+                    Write-Verbose "  First result EntityType: $($results[0].EntityType)"
+                }
+
+                return $results
+            }
+            else {
+                Write-Verbose "  Results array is empty"
+                return @()
+            }
         }
         else {
+            Write-ColorOutput "  API returned success=$($response.success)" "Yellow"
             return @()
         }
     }
     catch {
-        Write-ColorOutput "  Error searching for '$DocumentName': $_" "Yellow"
+        $errorMsg = $_.Exception.Message
+        Write-ColorOutput "  Error searching for '$DocumentName': $errorMsg" "Yellow"
+        Write-Verbose "  Exception details: $errorMsg"
+        Write-Verbose "  Exception type: $($_.Exception.GetType().Name)"
+
+        if ($_.Exception.Response) {
+            Write-Verbose "  Status code: $($_.Exception.Response.StatusCode)"
+            Write-Verbose "  Status description: $($_.Exception.Response.StatusDescription)"
+        }
+
+        # Try to get more details from the error record
+        if ($_.ErrorDetails) {
+            Write-Verbose "  Error details: $($_.ErrorDetails.Message)"
+        }
+
         return @()
     }
 }
@@ -166,6 +218,11 @@ function Search-ProcessesByDocument {
 try {
     Write-ColorOutput "`n=== Process Manager Unpublished Process Search ===" "Cyan"
     Write-ColorOutput "This script searches for unpublished processes that reference specific documents.`n" "White"
+
+    if ($VerbosePreference -eq 'SilentlyContinue') {
+        Write-ColorOutput "Tip: Run with -Verbose flag for detailed debugging output" "Gray"
+    }
+    Write-Host ""
 
     # Get Process Manager Site URL
     $siteUrl = Read-Host "Enter the Process Manager Site URL (e.g., https://demo.promapp.com)"
@@ -223,10 +280,17 @@ try {
 
         $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -SearchToken $searchToken -DocumentName $docName
 
-        if ($processes.Count -gt 0) {
-            Write-ColorOutput "  Found $($processes.Count) unpublished process(es)" "Green"
+        # Ensure we have an array
+        $processArray = @($processes)
 
-            foreach ($process in $processes) {
+        Write-Verbose "Main loop received $($processArray.Count) result(s) from search function"
+
+        if ($processArray.Count -gt 0) {
+            Write-ColorOutput "  Found $($processArray.Count) unpublished process(es)" "Green"
+
+            foreach ($process in $processArray) {
+                Write-Verbose "    Adding process: $($process.Name) (ID: $($process.ProcessUniqueId))"
+
                 $allResults += [PSCustomObject]@{
                     DocumentName = $docName
                     ProcessName = $process.Name

@@ -69,7 +69,7 @@ See `SampleDocumentNames.csv` for an example.
    - Display progress in the console
    - Export results to a timestamped CSV file
 
-### Verbose Mode
+### Verbose Mode (Highly Recommended for Debugging)
 
 For debugging and detailed output, run the script with the `-Verbose` flag:
 
@@ -77,11 +77,33 @@ For debugging and detailed output, run the script with the `-Verbose` flag:
 .\Search-UnpublishedProcesses.ps1 -Verbose
 ```
 
-This will show:
-- The exact search URLs being called
-- Response success status and result counts
-- Detailed error messages and exception details
-- Authentication and token retrieval process details
+This will show extensive debugging information:
+- **The exact search URLs** being called (with URL-encoded quotes)
+- **Encoded search criteria** (e.g., `%22Action%20Item%22`)
+- **Response object types** and structure
+- **Response success property** value
+- **Results array count** at each step
+- **Sample result details** (Name, EntityType, UniqueId)
+- **Detailed error messages** with status codes
+- **Authentication and token** retrieval details
+
+Example verbose output:
+```
+  Searching for: "Action Item"
+  Search URL: https://dmo-wus-sch.promapp.io/fullsearch?SearchCriteria=%22Action%20Item%22&IncludedTypes=1...
+  Encoded criteria: %22Action%20Item%22
+  Raw response type: PSCustomObject
+  Response.success property: True
+  Results array count: 2
+  Returning 2 result(s)
+  First result Name: Document Review Process
+  First result EntityType: UnpublishedProcess
+Main loop received 2 result(s) from search function
+    Adding process: Document Review Process (ID: abc-123...)
+    Adding process: Action Item Workflow (ID: def-456...)
+```
+
+**Use this mode first** if you encounter any issues with missing results or fuzzy searches.
 
 ## Output
 
@@ -223,14 +245,17 @@ The search looks across multiple fields in unpublished processes:
 
 If the script reports "No unpublished processes found" but you know results exist:
 
-1. **Run with Verbose Mode**:
+1. **Run with Verbose Mode** (MOST IMPORTANT STEP):
    ```powershell
    .\Search-UnpublishedProcesses.ps1 -Verbose
    ```
-   This will show:
-   - The exact search URL being called
-   - The API response status
-   - The number of results returned
+
+   Look for these key indicators in the verbose output:
+   - **Encoded criteria**: Should show `%22YourSearchTerm%22` (quotes encoded as %22)
+   - **Response.success property**: Should be `True`
+   - **Results array count**: Should show the number of items returned
+   - If count is 0 but you expect results, the issue is with the API/search term
+   - If count is > 0 but script says "No unpublished processes found", there's a bug (please report)
 
 2. **Check the Search Term**:
    - Verify document names are spelled exactly as they appear in Process Manager

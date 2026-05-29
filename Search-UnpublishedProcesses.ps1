@@ -22,9 +22,10 @@ function Write-ColorOutput {
     Write-Host $Message -ForegroundColor $Color
 }
 
-# Function to parse a full site URL into its base URL and tenant components
+# Function to parse a full site URL into its base URL and site name components.
 # Accepts a full URL such as "https://au.promapp.com/apagroup" and returns
 # a hashtable with BaseUrl ("https://au.promapp.com") and TenantId ("apagroup").
+# (TenantId is the internal name for the site-name path segment used in the API URLs.)
 function Get-SiteUrlComponents {
     param(
         [string]$FullUrl
@@ -50,8 +51,10 @@ function Get-SiteUrlComponents {
         $uri = [System.Uri]$trimmed
         $result.BaseUrl = "$($uri.Scheme)://$($uri.Authority)"
 
-        # The tenant is the first non-empty path segment (e.g. /apagroup/...)
-        $segments = $uri.AbsolutePath.Trim('/').Split('/') | Where-Object { $_ -ne "" }
+        # The site name is the first non-empty path segment (e.g. /apagroup/...).
+        # Wrap in @() so a single segment stays an array rather than collapsing to a
+        # string (otherwise $segments[0] would return the first character).
+        $segments = @($uri.AbsolutePath.Trim('/').Split('/') | Where-Object { $_ -ne "" })
         if ($segments.Count -gt 0) {
             $result.TenantId = [System.Uri]::UnescapeDataString($segments[0])
         }
@@ -318,20 +321,20 @@ try {
     }
     Write-Host ""
 
-    # Get Process Manager Site URL (full URL including the tenant, e.g. https://au.promapp.com/apagroup)
-    $fullUrl = Read-Host "Enter the full Process Manager Site URL including your tenant (e.g., https://au.promapp.com/apagroup)"
+    # Get Process Manager Site URL (full URL including the site name, e.g. https://au.promapp.com/promapp)
+    $fullUrl = Read-Host "Enter the full Process Manager Site URL including your site name (e.g., https://au.promapp.com/promapp)"
     $parsedSite = Get-SiteUrlComponents -FullUrl $fullUrl
     $siteUrl = $parsedSite.BaseUrl
     $tenantId = $parsedSite.TenantId
 
-    # If the tenant could not be parsed from the URL, prompt for it separately
+    # If the site name could not be parsed from the URL, prompt for it separately
     if ([string]::IsNullOrWhiteSpace($tenantId)) {
-        Write-ColorOutput "Could not detect a tenant in the URL." "Yellow"
-        $tenantId = Read-Host "Enter the Tenant ID (automation tenant)"
+        Write-ColorOutput "Could not detect a site name in the URL." "Yellow"
+        $tenantId = Read-Host "Enter the Site Name"
     }
 
-    Write-ColorOutput "Site URL: $siteUrl" "Gray"
-    Write-ColorOutput "Tenant:   $tenantId" "Gray"
+    Write-ColorOutput "Site URL:  $siteUrl" "Gray"
+    Write-ColorOutput "Site Name: $tenantId" "Gray"
 
     # Get credentials
     $username = Read-Host "Enter your username"

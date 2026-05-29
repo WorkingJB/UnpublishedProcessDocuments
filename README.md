@@ -61,12 +61,12 @@ See `SampleDocumentNames.csv` for an example.
    ```
 
 2. The script will prompt you for:
-   - Full Process Manager Site URL **including your tenant** (e.g., `https://au.promapp.com/apagroup`). The script automatically splits this into the base URL (`https://au.promapp.com`) and the tenant (`apagroup`), so you no longer need to enter them separately.
+   - Full Process Manager Site URL **including your site name** (e.g., `https://au.promapp.com/promapp`). The script automatically splits this into the base URL (`https://au.promapp.com`) and the site name (`promapp`), so you no longer need to enter them separately.
    - Username
    - Password
    - Path to the CSV file containing document names
 
-   > If the URL you enter does not contain a tenant segment, the script will fall back to asking for the Tenant ID separately.
+   > If the URL you enter does not contain a site name segment, the script will fall back to asking for the Site Name separately.
 
 3. The script will:
    - Authenticate to Process Manager (OAuth2)
@@ -134,8 +134,8 @@ The script generates a CSV file named `UnpublishedProcesses_Results_YYYYMMDD_HHM
 === Process Manager Unpublished Process Search ===
 This script searches for unpublished processes that reference specific documents.
 
-Site URL: https://au.promapp.com
-Tenant:   apagroup
+Site URL:  https://au.promapp.com
+Site Name: apagroup
 Authenticating to Process Manager...
 Authentication successful!
 Getting search service token...

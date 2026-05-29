@@ -39,11 +39,17 @@ Create a CSV file with a column named `DocumentName`:
 ```csv
 DocumentName
 Screenshot 2025-11
-Test Document
-Employee Handbook
+VIC Filenaming Approved Standard.JPG
+Test Document.pdf
+Employee Handbook.docx
 Training Manual
 Policy Document
 ```
+
+You can include file extensions (e.g. `.JPG`, `.pdf`, `.docx`) in the document
+names — the script strips recognised extensions automatically before searching,
+because the search API does not match names that include the extension. See
+[File Extension Handling](#file-extension-handling) for details.
 
 See `SampleDocumentNames.csv` for an example.
 
@@ -55,16 +61,18 @@ See `SampleDocumentNames.csv` for an example.
    ```
 
 2. The script will prompt you for:
-   - Process Manager Site URL (e.g., `https://demo.promapp.com`)
-   - Tenant ID (your automation tenant identifier)
+   - Full Process Manager Site URL **including your tenant** (e.g., `https://au.promapp.com/apagroup`). The script automatically splits this into the base URL (`https://au.promapp.com`) and the tenant (`apagroup`), so you no longer need to enter them separately.
    - Username
    - Password
    - Path to the CSV file containing document names
+
+   > If the URL you enter does not contain a tenant segment, the script will fall back to asking for the Tenant ID separately.
 
 3. The script will:
    - Authenticate to Process Manager (OAuth2)
    - Obtain a search service token
    - Determine the regional search endpoint
+   - Strip any recognised file extension from each document name (see [File Extension Handling](#file-extension-handling))
    - Search for each document name (with quotes for exact matching)
    - Display progress in the console
    - Export results to a timestamped CSV file
@@ -111,7 +119,8 @@ The script generates a CSV file named `UnpublishedProcesses_Results_YYYYMMDD_HHM
 
 ### Output CSV Columns
 
-- **DocumentName**: The document name that was searched
+- **DocumentName**: The original document name from your input CSV (including any extension)
+- **SearchTerm**: The term actually sent to the search API (with any recognised file extension stripped)
 - **ProcessName**: The name of the unpublished process found
 - **ProcessUniqueId**: The unique identifier for the process
 - **ItemUrl**: Direct URL to view the process
@@ -125,11 +134,13 @@ The script generates a CSV file named `UnpublishedProcesses_Results_YYYYMMDD_HHM
 === Process Manager Unpublished Process Search ===
 This script searches for unpublished processes that reference specific documents.
 
+Site URL: https://au.promapp.com
+Tenant:   apagroup
 Authenticating to Process Manager...
 Authentication successful!
 Getting search service token...
 Search service token obtained successfully!
-Using regional search endpoint: https://dmo-wus-sch.promapp.io
+Using regional search endpoint: https://prd-aus-sch.promapp.io
 
 Reading document names from CSV...
 Found 3 document names to search.
@@ -137,8 +148,9 @@ Found 3 document names to search.
 [1/3] Processing: Action Item
   Searching for: "Action Item"
   Found 2 unpublished process(es)
-[2/3] Processing: Screenshot 2025-11
-  Searching for: "Screenshot 2025-11"
+[2/3] Processing: VIC Filenaming Approved Standard.JPG
+  Stripped file extension; searching for: "VIC Filenaming Approved Standard"
+  Searching for: "VIC Filenaming Approved Standard"
   Found 1 unpublished process(es)
 [3/3] Processing: Employee Handbook
   Searching for: "Employee Handbook"
@@ -152,10 +164,10 @@ Results exported to: UnpublishedProcesses_Results_20251104_143022.csv
 ### CSV Output
 
 ```csv
-DocumentName,ProcessName,ProcessUniqueId,ItemUrl,EntityType
-Action Item,Process Review Workflow,abc123...,https://demo.promapp.com/.../Process/abc123...,UnpublishedProcess
-Action Item,Document Management,def456...,https://demo.promapp.com/.../Process/def456...,UnpublishedProcess
-Screenshot 2025-11,DeDocument Test,bc18b3a1...,https://demo.promapp.com/.../Process/bc18b3a1...,UnpublishedProcess
+DocumentName,SearchTerm,ProcessName,ProcessUniqueId,ItemUrl,EntityType
+Action Item,Action Item,Process Review Workflow,abc123...,https://au.promapp.com/.../Process/abc123...,UnpublishedProcess
+Action Item,Action Item,Document Management,def456...,https://au.promapp.com/.../Process/def456...,UnpublishedProcess
+VIC Filenaming Approved Standard.JPG,VIC Filenaming Approved Standard,Creating New Estate Gas Drawings (As-Is),bbe6a31f...,https://au.promapp.com/.../Process/bbe6a31f...,UnpublishedProcess
 ```
 
 ## API Details
@@ -218,6 +230,30 @@ Employee Handbook
 ```
 
 The script will search for `"Action Item"`, `"Screenshot 2025-11"`, and `"Employee Handbook"` (with quotes).
+
+### File Extension Handling
+
+The Process Manager search API does **not** match document names when the file
+extension is included in the search term. For example:
+
+- Searching for `"VIC Filenaming Approved Standard.JPG"` returns **0 results**
+- Searching for `"VIC Filenaming Approved Standard"` returns the unpublished process that references it
+
+To work around this, the script automatically **strips a recognised file
+extension** from each document name before searching. The original name is still
+recorded in the `DocumentName` output column, and the term actually searched is
+recorded in the `SearchTerm` column.
+
+Extensions are only removed when they match a curated list of common file types
+(documents, spreadsheets, presentations, images, diagrams, email, web/markup,
+archives, and media — e.g. `.pdf`, `.docx`, `.xlsx`, `.jpg`, `.png`, `.vsdx`,
+`.msg`, `.zip`, `.mp4`). Matching against a known list — rather than blindly
+removing everything after the last `.` — avoids mangling names that legitimately
+contain periods (for example, `Screenshot 2025-11-03 at 10.48.47` is left
+untouched because `.47` is not a recognised extension).
+
+If you need to support an extension that isn't in the list, add it to the
+`$script:CommonFileExtensions` array near the top of `Search-UnpublishedProcesses.ps1`.
 
 ### Search Fields
 

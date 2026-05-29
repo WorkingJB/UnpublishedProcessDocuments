@@ -22,6 +22,100 @@ function Write-ColorOutput {
     Write-Host $Message -ForegroundColor $Color
 }
 
+# Function to parse a full site URL into its base URL and tenant components
+# Accepts a full URL such as "https://au.promapp.com/apagroup" and returns
+# a hashtable with BaseUrl ("https://au.promapp.com") and TenantId ("apagroup").
+function Get-SiteUrlComponents {
+    param(
+        [string]$FullUrl
+    )
+
+    $result = @{
+        BaseUrl  = ""
+        TenantId = ""
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FullUrl)) {
+        return $result
+    }
+
+    $trimmed = $FullUrl.Trim()
+
+    # Add a scheme if the user omitted it so [System.Uri] can parse it
+    if ($trimmed -notmatch '^[a-zA-Z][a-zA-Z0-9+.-]*://') {
+        $trimmed = "https://$trimmed"
+    }
+
+    try {
+        $uri = [System.Uri]$trimmed
+        $result.BaseUrl = "$($uri.Scheme)://$($uri.Authority)"
+
+        # The tenant is the first non-empty path segment (e.g. /apagroup/...)
+        $segments = $uri.AbsolutePath.Trim('/').Split('/') | Where-Object { $_ -ne "" }
+        if ($segments.Count -gt 0) {
+            $result.TenantId = [System.Uri]::UnescapeDataString($segments[0])
+        }
+    }
+    catch {
+        # Fall back to treating the whole input as the base URL
+        $result.BaseUrl = $trimmed.TrimEnd('/')
+    }
+
+    return $result
+}
+
+# Common document file extensions used to strip extensions from document names.
+# The search API does not match document names when the file extension is included
+# (e.g. "VIC Filenaming Approved Standard.JPG" returns nothing, but
+# "VIC Filenaming Approved Standard" matches). Stripping a *known* extension - rather
+# than blindly removing everything after the last dot - avoids mangling names that
+# legitimately contain periods (e.g. "Screenshot 2025-11-03 at 10.48.47").
+$script:CommonFileExtensions = @(
+    # Documents
+    ".pdf", ".doc", ".docx", ".dot", ".dotx", ".txt", ".rtf", ".odt", ".pages",
+    # Spreadsheets
+    ".xls", ".xlsx", ".xlsm", ".csv", ".ods", ".numbers",
+    # Presentations
+    ".ppt", ".pptx", ".pps", ".ppsx", ".odp", ".key",
+    # Images
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".svg", ".webp", ".heic", ".ico",
+    # Diagrams / design
+    ".vsd", ".vsdx", ".drawio", ".ai", ".psd",
+    # Email
+    ".msg", ".eml",
+    # Web / markup
+    ".html", ".htm", ".xml", ".json", ".md",
+    # Archives
+    ".zip", ".rar", ".7z", ".tar", ".gz",
+    # Media
+    ".mp4", ".mov", ".avi", ".wmv", ".mp3", ".wav"
+)
+
+# Function to strip a known file extension from a document name.
+# Returns the name without the extension if it ends with a recognised extension;
+# otherwise returns the name unchanged.
+function Remove-FileExtension {
+    param(
+        [string]$DocumentName,
+        [string[]]$KnownExtensions = $script:CommonFileExtensions
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DocumentName)) {
+        return $DocumentName
+    }
+
+    $name = $DocumentName.Trim()
+
+    foreach ($ext in $KnownExtensions) {
+        if ($name.Length -gt $ext.Length -and
+            $name.EndsWith($ext, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $name.Substring(0, $name.Length - $ext.Length)
+        }
+    }
+
+    return $name
+}
+
 # Function to get the appropriate search endpoint based on region
 function Get-SearchEndpoint {
     param(
@@ -224,12 +318,20 @@ try {
     }
     Write-Host ""
 
-    # Get Process Manager Site URL
-    $siteUrl = Read-Host "Enter the Process Manager Site URL (e.g., https://demo.promapp.com)"
-    $siteUrl = $siteUrl.TrimEnd('/')
+    # Get Process Manager Site URL (full URL including the tenant, e.g. https://au.promapp.com/apagroup)
+    $fullUrl = Read-Host "Enter the full Process Manager Site URL including your tenant (e.g., https://au.promapp.com/apagroup)"
+    $parsedSite = Get-SiteUrlComponents -FullUrl $fullUrl
+    $siteUrl = $parsedSite.BaseUrl
+    $tenantId = $parsedSite.TenantId
 
-    # Get Tenant ID
-    $tenantId = Read-Host "Enter the Tenant ID (automation tenant)"
+    # If the tenant could not be parsed from the URL, prompt for it separately
+    if ([string]::IsNullOrWhiteSpace($tenantId)) {
+        Write-ColorOutput "Could not detect a tenant in the URL." "Yellow"
+        $tenantId = Read-Host "Enter the Tenant ID (automation tenant)"
+    }
+
+    Write-ColorOutput "Site URL: $siteUrl" "Gray"
+    Write-ColorOutput "Tenant:   $tenantId" "Gray"
 
     # Get credentials
     $username = Read-Host "Enter your username"
@@ -278,7 +380,14 @@ try {
         $processedCount++
         Write-ColorOutput "[$processedCount/$($documentNames.Count)] Processing: $docName" "Cyan"
 
-        $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -SearchToken $searchToken -DocumentName $docName
+        # Strip a known file extension before searching. The search API does not match
+        # document names that include the file extension, so we search on the base name.
+        $searchTerm = Remove-FileExtension -DocumentName $docName
+        if ($searchTerm -ne $docName) {
+            Write-ColorOutput "  Stripped file extension; searching for: `"$searchTerm`"" "Gray"
+        }
+
+        $processes = Search-ProcessesByDocument -SearchEndpoint $searchEndpoint -SearchToken $searchToken -DocumentName $searchTerm
 
         # Ensure we have an array
         $processArray = @($processes)
@@ -293,6 +402,7 @@ try {
 
                 $allResults += [PSCustomObject]@{
                     DocumentName = $docName
+                    SearchTerm = $searchTerm
                     ProcessName = $process.Name
                     ProcessUniqueId = $process.ProcessUniqueId
                     ItemUrl = $process.ItemUrl
